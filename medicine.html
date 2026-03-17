@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Medicine Order</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+body{
+background:#b7642e;
+font-family:'Nunito', sans-serif;
+}
+
+.order-box{
+background:#d9f2e6;
+border-radius:30px;
+padding:25px;
+}
+
+input{
+width:100%;
+padding:12px;
+border-radius:15px;
+background:#f5f5f5;
+}
+
+.order-btn{
+background:#d9f2e6;
+color:#0f766e;
+font-weight:bold;
+font-size:22px;
+padding:10px 40px;
+border-radius:25px;
+margin-top:20px;
+}
+</style>
+
+</head>
+
+<body>
+
+<!-- HEADER (FIXED MOBILE SAFE) -->
+<div class="w-full bg-[#F5E9D8] py-4 flex items-center justify-center relative">
+
+<img src="startup.png" class="absolute left-2 w-8 md:w-14">
+
+<h1 class="text-2xl md:text-5xl font-bold text-black text-center px-10">
+AN SERVICES
+</h1>
+
+</div>
+
+<!-- CONTAINER -->
+<div class="max-w-md mx-auto px-4 py-8">
+
+<div class="flex items-center justify-center mb-6">
+<div class="bg-[#d9f2e6] p-3 rounded-xl shadow mr-3">
+<img src="medicine.png" class="w-8">
+</div>
+
+<h2 class="text-xl md:text-3xl font-semibold bg-[#d9f2e6] px-4 py-2 rounded-full text-gray-800 text-center">
+Get your medicine with no hustle
+</h2>
+</div>
+
+<div class="order-box space-y-3">
+
+<input id="name" placeholder="Name">
+<input id="phone" placeholder="Phone Number">
+<input id="location" placeholder="Location">
+
+<button onclick="getLocation()" class="underline text-sm text-gray-700">
+Use my current location
+</button>
+
+<div class="mt-2">
+<label class="text-sm text-gray-700 block mb-2">Upload Prescription</label>
+
+<!-- Hidden inputs -->
+<input type="file" id="prescriptionCamera" accept="image/*" capture="environment" class="hidden" onchange="handleFileSelect(this)">
+<input type="file" id="prescriptionGallery" accept="image/*" class="hidden" onchange="handleFileSelect(this)">
+
+<!-- Choice buttons -->
+<div class="flex gap-3">
+<button type="button" onclick="document.getElementById('prescriptionCamera').click()"
+class="flex-1 bg-black text-white py-2 rounded-xl text-sm font-semibold">
+📷 Camera
+</button>
+<button type="button" onclick="document.getElementById('prescriptionGallery').click()"
+class="flex-1 bg-gray-700 text-white py-2 rounded-xl text-sm font-semibold">
+🖼️ Gallery
+</button>
+</div>
+
+<!-- Preview -->
+<div id="filePreview" class="mt-2 text-sm text-gray-700"></div>
+</div>
+
+</div>
+
+<div class="text-center">
+<button onclick="placeOrder()" class="order-btn">
+Order Medicine
+</button>
+</div>
+
+</div>
+
+<script>
+
+const GOOGLE_SCRIPT_URL="https://script.google.com/macros/s/AKfycbyjHh-s11Af9E6CTyYZjQ0xh8Pov6JwfALRDe0nVAfqd2fPVsuSq8hf9c5lVo0R-276/exec";
+const TELEGRAM_BOT_TOKEN="8636717589:AAERLcfWUTkSxv10smOelX_a4XXBRSGYJW8";
+const TELEGRAM_CHAT_ID="6012626075";
+
+
+function getLocation(){
+
+if(!confirm("Allow access to your current location?")){return;}
+
+if (!navigator.geolocation) {
+  alert("Geolocation not supported");
+  return;
+}
+
+navigator.geolocation.getCurrentPosition(
+
+function(pos){
+const lat = pos.coords.latitude;
+const lon = pos.coords.longitude;
+document.getElementById("location").value = lat + "," + lon;
+},
+
+function(){
+alert("Allow location permission");
+}
+
+);
+
+}
+
+
+/* TRACK SELECTED FILE ACROSS BOTH INPUTS */
+let selectedFile = null;
+
+function handleFileSelect(input){
+if(input.files && input.files[0]){
+selectedFile = input.files[0];
+document.getElementById("filePreview").textContent = "✅ Selected: " + selectedFile.name;
+}
+}
+
+
+/* BASE64 */
+function getBase64(file){
+return new Promise((resolve,reject)=>{
+const reader=new FileReader();
+reader.readAsDataURL(file);
+reader.onload=()=>resolve(reader.result);
+reader.onerror=error=>reject(error);
+});
+}
+
+
+async function placeOrder(){
+
+const name = document.getElementById("name").value.trim();
+const phone = document.getElementById("phone").value.trim();
+const location = document.getElementById("location").value.trim();
+
+/* VALIDATION */
+if(!name || !phone || !location || !selectedFile){
+alert("Please fill all fields and upload a prescription");
+return;
+}
+
+/* IMAGE TO BASE64 */
+let base64="";
+try{
+base64 = await getBase64(selectedFile);
+}catch(err){
+alert("Failed to read image. Try again.");
+return;
+}
+
+/* SEND TO GOOGLE SCRIPT */
+let fileUrl="No file";
+
+try{
+
+const res = await fetch(GOOGLE_SCRIPT_URL,{
+method:"POST",
+body:JSON.stringify({
+service:"medicine",
+name:name,
+phone:phone,
+location:location,
+image:base64
+})
+});
+
+const data = await res.json();
+
+if(data.fileUrl){
+fileUrl = data.fileUrl;
+}
+
+}catch(err){
+alert("Server error. Try again.");
+return;
+}
+
+/* TELEGRAM MESSAGE */
+const message =
+`NEW MEDICINE ORDER
+
+Name: ${name}
+
+Phone: ${phone}
+
+Location:
+https://maps.google.com/?q=${location}
+
+Prescription:
+${fileUrl}`;
+
+/* SEND TELEGRAM — fixed token */
+try{
+await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+chat_id:TELEGRAM_CHAT_ID,
+text:message
+})
+});
+}catch(err){
+console.error("Telegram error:",err);
+}
+
+alert("Order sent successfully!");
+
+/* RESET */
+document.getElementById("name").value="";
+document.getElementById("phone").value="";
+document.getElementById("location").value="";
+document.getElementById("filePreview").textContent="";
+document.getElementById("prescriptionCamera").value="";
+document.getElementById("prescriptionGallery").value="";
+selectedFile=null;
+
+}
+
+</script>
+
+</body>
+</html>
