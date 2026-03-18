@@ -692,82 +692,72 @@ function setOrderLoading(loading, message){
 
 
 /* ══════════════════════════════════════════════════════
-   UPLOAD via XMLHttpRequest
-   — real upload progress 40→90%
-   — 120s timeout (handles slow 2G/3G connections)
-   — auto-retry up to 3 attempts (3s gap between each)
-   — handles no-cors empty body (status 0) gracefully
+   SEND PHOTO DIRECTLY TO TELEGRAM
+   — Uses multipart/form-data (binary blob, no base64)
+   — Telegram API allows cross-origin → zero CORS issues
+   — Auto-retry up to 3 attempts, 3s gap
+   — The photo appears in chat with order info as caption
+   — This completely bypasses Google Apps Script for images,
+     which was the root cause of all "network error" failures
+     (Apps Script blocks browser XHR due to CORS preflight)
 ══════════════════════════════════════════════════════ */
 
-function uploadToScript(payload){
-  return new Promise(function(resolve, reject){
+async function sendPhotoToTelegram(blob, caption){
 
-    if(GOOGLE_SCRIPT_URL === ""){
-      resolve({ success: true, fileUrl: "pending" });
-      return;
+  const MAX_ATTEMPTS = 3;
+
+  for(let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++){
+
+    if(attempt > 1){
+      setProgress(55, "Retrying photo… attempt " + attempt + " of " + MAX_ATTEMPTS);
+      await new Promise(function(r){ setTimeout(r, 3000); });
     }
 
-    const MAX_ATTEMPTS = 3;
-    let   attempt      = 0;
+    try{
+      const fd = new FormData();
+      fd.append("chat_id", TELEGRAM_CHAT_ID);
+      fd.append("caption", caption);
+      fd.append("photo",   blob, "prescription.jpg");
 
-    function tryUpload(){
-      attempt++;
+      const res  = await fetch(
+        "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendPhoto",
+        { method: "POST", body: fd }
+      );
+      const data = await res.json();
 
-      /* Show retry banner from attempt 2 onwards */
-      if(attempt > 1){
-        setProgress(42, "Retrying… attempt " + attempt + " of " + MAX_ATTEMPTS);
+      if(data.ok){ return data; }   /* success — done */
+
+      /* Telegram returned an error (bad token, bad chat_id, etc.) */
+      if(attempt >= MAX_ATTEMPTS){
+        throw new Error("Telegram API: " + JSON.stringify(data));
       }
 
-      const xhr = new XMLHttpRequest();
-
-      xhr.upload.onprogress = function(e){
-        if(e.lengthComputable){
-          const pct = 40 + Math.round((e.loaded / e.total) * 50);
-          setProgress(pct, "Uploading… " + pct + "%");
-        }
-      };
-
-      xhr.onload = function(){
-        setProgress(95, "Processing on server…");
-
-        if(xhr.status === 0 || xhr.status === 200){
-          if(!xhr.responseText || xhr.responseText.trim() === ""){
-            resolve({ success: true, fileUrl: "pending" });
-            return;
-          }
-          try{
-            resolve(JSON.parse(xhr.responseText));
-          } catch(e){
-            resolve({ success: true, fileUrl: "pending" });
-          }
-        } else {
-          /* Server returned an HTTP error — retry if attempts remain */
-          const err = new Error("HTTP " + xhr.status + " — " + xhr.statusText);
-          if(attempt < MAX_ATTEMPTS){ setTimeout(tryUpload, 3000); }
-          else { reject(err); }
-        }
-      };
-
-      xhr.onerror = function(){
-        /* Network-level error (offline, DNS fail, etc.) — retry */
-        const err = new Error("Network error. Check your internet connection and try again.");
-        if(attempt < MAX_ATTEMPTS){ setTimeout(tryUpload, 3000); }
-        else { reject(err); }
-      };
-
-      xhr.ontimeout = function(){
-        /* Timed out — retry */
-        const err = new Error("Upload timed out (120s). Check your connection and try again.");
-        if(attempt < MAX_ATTEMPTS){ setTimeout(tryUpload, 3000); }
-        else { reject(err); }
-      };
-
-      xhr.timeout = 120000;   /* 120s — enough for compressed image on 2G/3G */
-      xhr.open("POST", GOOGLE_SCRIPT_URL, true);
-      xhr.send(JSON.stringify(payload));
+    } catch(err){
+      if(attempt >= MAX_ATTEMPTS){ throw err; }
     }
+  }
+}
 
-    tryUpload();   /* kick off first attempt */
+
+/* ══════════════════════════════════════════════════════
+   LOG ORDER TO GOOGLE APPS SCRIPT (text only, no image)
+   — Only called if GOOGLE_SCRIPT_URL is filled in
+   — Non-fatal: order already delivered via Telegram photo
+   — No large payload → no CORS / timeout issues
+══════════════════════════════════════════════════════ */
+
+function logToScript(payload){
+  return new Promise(function(resolve){
+
+    if(GOOGLE_SCRIPT_URL === ""){ resolve(); return; }
+
+    const xhr = new XMLHttpRequest();
+    xhr.onload   = function(){ resolve(); };
+    xhr.onerror  = function(){ resolve(); };   /* non-fatal */
+    xhr.ontimeout= function(){ resolve(); };   /* non-fatal */
+    xhr.timeout  = 30000;
+    xhr.open("POST", GOOGLE_SCRIPT_URL, true);
+    xhr.send(JSON.stringify(payload));
 
   });
 }
@@ -787,82 +777,29 @@ async function placeOrder(){
   const phone    = document.getElementById("phone").value.trim();
   const location = document.getElementById("location").value.trim();
 
-  /* Phase 1 — Compress image (reduces 5MB → ~200KB for reliable upload) */
+  /* Phase 1 — Compress image (5MB → ~200KB, faster upload) */
   setOrderLoading(true, "Compressing image");
   showProgress();
   setProgress(0, "Compressing image…");
 
-  let fileToUpload = selectedFile;
+  let blob = selectedFile;
   try{
-    fileToUpload = await compressImage(selectedFile);
-    const kb = (fileToUpload.size / 1024).toFixed(0);
-    setProgress(15, "Compressed to " + kb + " KB ✅");
+    blob = await compressImage(selectedFile);
+    const kb = (blob.size / 1024).toFixed(0);
+    setProgress(20, "Compressed to " + kb + " KB ✅");
   } catch(e){
-    fileToUpload = selectedFile;  /* silently fall back to original */
+    blob = selectedFile;   /* silently fall back to original */
   }
 
-  /* Phase 2 — Read compressed image as base64 */
-  setOrderLoading(true, "Reading image");
-
-  let base64 = "";
-  try{
-    base64 = await getBase64WithProgress(fileToUpload);
-  } catch(err){
-    const msg = err.message || String(err);
-    setOrderLoading(false);
-    showError(msg);
-    alert("❌ Failed to read the prescription image.\n\nError: " + msg);
-    return;
-  }
-
-  /* Phase 4 — Upload */
-  setOrderLoading(true, "Uploading prescription");
-
-  let fileUrl   = "No file";
-  let sheetsOk  = true;
-  let uploadErr = "";
-
-  try{
-
-    const result = await uploadToScript({
-      service  : "medicine",
-      name     : name,
-      phone    : phone,
-      location : location,
-      image    : base64
-    });
-
-    setProgress(100, "Upload complete ✅");
-
-    if(result && result.fileUrl && result.fileUrl !== "pending"){
-      fileUrl = result.fileUrl;
-    }
-
-    if(result && result.success === false){
-      sheetsOk  = false;
-      uploadErr = "Script error: " + (result.error || "unknown");
-    }
-
-  } catch(err){
-    sheetsOk  = false;
-    uploadErr = err.message || String(err);
-  }
-
-  if(!sheetsOk){
-    setOrderLoading(false);
-    showError(uploadErr);
-    alert("❌ Failed to upload prescription.\n\nError: " + uploadErr + "\n\nCheck internet and try again.");
-    return;
-  }
-
-  /* Phase 5 — Telegram */
-  setOrderLoading(true, "Sending notification");
+  /* Phase 2 — Send prescription photo directly to Telegram */
+  setOrderLoading(true, "Sending prescription");
+  setProgress(30, "Uploading photo…");
 
   const mapsLine = location.includes(",")
     ? "https://maps.google.com/?q=" + location
     : location;
 
-  const message =
+  const caption =
 `💊 NEW MEDICINE ORDER
 
 👤 Name: ${name}
@@ -870,40 +807,38 @@ async function placeOrder(){
 📞 Phone: ${phone}
 
 📍 Location:
-${mapsLine}
+${mapsLine}`;
 
-🖼️ Prescription:
-${fileUrl}`;
+  if(TELEGRAM_BOT_TOKEN !== ""){
 
-  let telegramOk  = true;
-  let telegramErr = "";
-
-  try{
-    const tRes  = await fetch(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method  : "POST",
-        headers : { "Content-Type": "application/json" },
-        body    : JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: message })
-      }
-    );
-    const tData = await tRes.json();
-    if(!tData.ok){
-      telegramOk  = false;
-      telegramErr = "Telegram API: " + JSON.stringify(tData);
+    try{
+      setProgress(40, "Sending to Telegram…");
+      await sendPhotoToTelegram(blob, caption);
+      setProgress(90, "Photo sent ✅");
+    } catch(err){
+      const msg = err.message || String(err);
+      setOrderLoading(false);
+      showError(msg);
+      alert("❌ Failed to send prescription.\n\nError: " + msg + "\n\nCheck internet and try again.");
+      return;
     }
-  } catch(err){
-    telegramOk  = false;
-    telegramErr = "Telegram fetch: " + (err.message || String(err));
+
   }
 
+  /* Phase 3 — Log text data to Google Apps Script (optional, non-fatal) */
+  if(GOOGLE_SCRIPT_URL !== ""){
+    setOrderLoading(true, "Saving order record");
+    setProgress(93, "Saving record…");
+    await logToScript({
+      service  : "medicine",
+      name     : name,
+      phone    : phone,
+      location : location
+    });
+  }
+
+  setProgress(100, "Order complete ✅");
   setOrderLoading(false);
-
-  if(!telegramOk && TELEGRAM_BOT_TOKEN !== ""){
-    showError(telegramErr);
-    alert("❌ Prescription uploaded but Telegram failed.\n\nError: " + telegramErr + "\n\nPlease inform the admin.");
-    return;
-  }
 
   alert("✅ Order sent successfully!");
 
@@ -924,3 +859,6 @@ ${fileUrl}`;
 
 </body>
 </html>
+
+
+  
