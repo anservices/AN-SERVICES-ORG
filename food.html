@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Food Order</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+
+body{
+background:#b7642e;
+font-family:sans-serif;
+}
+
+.order-box{
+background:#e7f05a;
+border-radius:30px;
+padding:25px;
+}
+
+input,select{
+width:100%;
+padding:12px;
+border-radius:15px;
+background:#eeeeee;
+}
+
+.order-btn{
+background:#e7f05a;
+color:red;
+font-weight:bold;
+font-size:26px;
+padding:10px 40px;
+border-radius:25px;
+margin-top:20px;
+}
+
+.order-btn:disabled{
+opacity:0.6;
+cursor:not-allowed;
+}
+
+.item-row{
+display:flex;
+justify-content:space-between;
+background:white;
+padding:6px 10px;
+border-radius:10px;
+margin-top:6px;
+}
+
+/* ── Spinner ── */
+.spinner{
+display:inline-block;
+width:20px;
+height:20px;
+border:3px solid rgba(255,0,0,0.3);
+border-top-color:red;
+border-radius:50%;
+animation:spin 0.7s linear infinite;
+vertical-align:middle;
+margin-left:8px;
+}
+
+@keyframes spin{
+to{transform:rotate(360deg);}
+}
+
+.location-status{
+font-size:13px;
+margin-top:4px;
+min-height:18px;
+}
+#screenLock{
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  background:rgba(0,0,0,0.45);
+  backdrop-filter:blur(2px);
+  touch-action:none;
+  user-select:none;
+}
+#screenLock .lock-card{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  background:white;
+  border-radius:20px;
+  padding:28px 36px;
+  text-align:center;
+  box-shadow:0 8px 32px rgba(0,0,0,0.25);
+  min-width:220px;
+}
+#screenLock .lock-spinner{
+  display:inline-block;
+  width:36px;
+  height:36px;
+  border:4px solid rgba(0,0,0,0.12);
+  border-top-color:#b7642e;
+  border-radius:50%;
+  animation:lockSpin 0.7s linear infinite;
+  margin-bottom:14px;
+}
+@keyframes lockSpin{
+  to{transform:rotate(360deg);}
+}
+#screenLock .lock-text{
+  font-size:16px;
+  font-weight:700;
+  color:#333;
+  margin:0;
+}
+#screenLock .lock-sub{
+  font-size:12px;
+  color:#888;
+  margin-top:5px;
+}
+</style>
+
+</head>
+
+<body>
+
+<!-- HEADER -->
+
+<div class="w-full bg-[#F5E9D8] py-4 flex items-center justify-center relative">
+
+<img src="startup.png" class="absolute left-4 w-10 md:w-14">
+
+<h1 class="text-3xl md:text-5xl font-bold text-black">
+AN SERVICES
+</h1>
+
+</div>
+<div id="screenLock">
+  <div class="lock-card">
+    <div class="lock-spinner"></div>
+    <p class="lock-text" id="lockMessage">Ordering your products…</p>
+    <p class="lock-sub">Please don't close this page</p>
+  </div>
+</div>
+
+
+
+<!-- PAGE CONTAINER -->
+
+<div class="max-w-md mx-auto px-5 py-10">
+
+<!-- TITLE -->
+
+<div class="flex items-center justify-center mb-6">
+
+<div class="bg-[#e7f05a] p-3 rounded-xl shadow mr-3">
+<img src="plate.png" class="w-8">
+</div>
+
+<h2 class="text-3xl font-bold bg-[#e7f05a] px-6 py-2 rounded-full">
+Food
+</h2>
+
+</div>
+
+
+<!-- ORDER BOX -->
+
+<div class="order-box space-y-3">
+
+<select id="restaurant">
+<option value="">Select Restaurant</option>
+<option>Restaurant Bablu</option>
+<option>Building upar</option>
+<option>Restaurant building niche </option>
+<option>Restaurant sante lama building</option>
+<option>Restaurant niche 2 5</option>
+<option>Restaurant parapang</option>
+<option>Restaurant shekor</option>
+</select>
+
+<input id="itemName" placeholder="Item name">
+
+<input id="itemQty" placeholder="Quantity">
+
+<button onclick="addItem()" class="bg-black text-white w-full py-2 rounded">
+Add Item
+</button>
+
+<div id="itemList"></div>
+
+<input id="phone" placeholder="Phone Number">
+
+<input id="location" placeholder="Location">
+
+<!-- Location status line -->
+<div id="locationStatus" class="location-status text-gray-600"></div>
+
+<button onclick="getLocation()" id="locationBtn" class="underline text-sm">
+Use my current location
+</button>
+
+</div>
+
+
+<div class="text-center">
+
+<button onclick="placeOrder()" id="orderBtn" class="order-btn">
+order
+</button>
+
+</div>
+
+</div>
+<!-- ── CALL BUTTON ── -->
+<div class="text-center pb-8">
+  <a href="tel:+916000072131 " id="callBtn"
+    class="inline-flex items-center gap-2 bg-[#F5E9D8] text-black font-bold text-lg px-6 py-3 rounded-full shadow-md active:scale-95 transition-transform">
+    📞 Call Us
+  </a>
+</div>
+
+
+
+
+<script>
+
+let orderItems = [];
+
+/* ── LOCATION WATCHER (fixes second-order lag) ── */
+let locationWatcher = null;
+
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+   (Different from the Grocery app — deploy a separate
+    Web App in Apps Script for food orders)
+───────────────────────────────────────────────────── */
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby583Z29WipcTv3jKq4hnr6kvXyTLzEmMZd-NEpdQ7Y-uVj4RHYSDE1lCk73h_F29Bm/exec";   /* ← PASTE HERE */
+
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR TELEGRAM BOT TOKEN HERE
+   Get it from @BotFather on Telegram → /newbot
+───────────────────────────────────────────────────── */
+const TELEGRAM_BOT_TOKEN = "7936673352:AAGlRScPS8nQThVQ6azVwmlXYjWMUHWmP9E";  /* ← PASTE HERE */
+
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR TELEGRAM CHAT ID HERE
+   Send a message to your bot, then open:
+   https://api.telegram.org/bot<TOKEN>/getUpdates
+   Find "chat":{"id": ...} — that number is your Chat ID
+───────────────────────────────────────────────────── */
+const TELEGRAM_CHAT_ID = "6012626075";    /* ← PASTE HERE */
+
+
+/* ══════════════════════════════════════════════════════
+   ADD ITEM
+══════════════════════════════════════════════════════ */
+
+function addItem(){
+
+  const name = document.getElementById("itemName").value.trim();
+  const qty  = document.getElementById("itemQty").value.trim();
+
+  if(name === "" || qty === ""){
+    alert("Enter item and quantity");
+    return;
+  }
+
+  orderItems.push({ name, qty });
+  renderItems();
+
+  document.getElementById("itemName").value = "";
+  document.getElementById("itemQty").value  = "";
+
+}
+
+
+/* ══════════════════════════════════════════════════════
+   RENDER ITEM LIST  (with Edit + Remove buttons)
+══════════════════════════════════════════════════════ */
+
+function renderItems(){
+
+  const container = document.getElementById("itemList");
+  container.innerHTML = "";
+
+  orderItems.forEach((item, index) => {
+
+    const row = document.createElement("div");
+    row.className = "item-row";
+
+    row.innerHTML = `
+      <span>${item.name}</span>
+      <span>${item.qty}</span>
+      <div class="space-x-2">
+        <button onclick="editItem(${index})"  class="text-blue-600 text-sm">Edit</button>
+        <button onclick="removeItem(${index})" class="text-red-600 text-sm">Remove</button>
+      </div>
+    `;
+
+    container.appendChild(row);
+
+  });
+
+}
+
+function removeItem(index){
+  orderItems.splice(index, 1);
+  renderItems();
+}
+
+function editItem(index){
+  const item = orderItems[index];
+  document.getElementById("itemName").value = item.name;
+  document.getElementById("itemQty").value  = item.qty;
+  orderItems.splice(index, 1);
+  renderItems();
+}
+
+
+/* ══════════════════════════════════════════════════════
+   LOCATION  — watchPosition fixes the second-order lag
+══════════════════════════════════════════════════════ */
+
+function getLocation(){
+
+  if(!confirm("Allow access to your current location?")){ return; }
+
+  const statusEl  = document.getElementById("locationStatus");
+  const locationEl = document.getElementById("location");
+  const btn        = document.getElementById("locationBtn");
+
+  statusEl.textContent = "📍 Fetching your location…";
+  btn.disabled         = true;
+
+  /* Clear any existing watcher to avoid duplicates */
+  if(locationWatcher !== null){
+    navigator.geolocation.clearWatch(locationWatcher);
+    locationWatcher = null;
+  }
+
+  const opts = {
+    enableHighAccuracy : true,
+    timeout            : 10000,
+    maximumAge         : 0       /* always fresh — no cache lag */
+  };
+
+  function onSuccess(position){
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
+    locationEl.value     = lat + "," + lon;
+    statusEl.textContent = "✅ Location fetched!";
+    btn.disabled         = false;
+  }
+
+  function onError(){
+    statusEl.textContent = "❌ Unable to get location. Please allow permission.";
+    btn.disabled         = false;
+  }
+
+  /* watchPosition stays alive → second order fetches instantly */
+  locationWatcher = navigator.geolocation.watchPosition(onSuccess, onError, opts);
+
+}
+/* ── VALIDATION ────────────────────────────────────────── */
+function validateOrder(){
+  const restaurant = document.getElementById("restaurant").value.trim();
+  const phone      = document.getElementById("phone").value.trim();
+  const location   = document.getElementById("location").value.trim();
+  if(orderItems.length === 0){
+    alert("Please add at least one item before ordering.");
+    return false;
+  }
+  if(restaurant === ""){
+    alert("Please select a restaurant.");
+    document.getElementById("restaurant").focus();
+    return false;
+  }
+  if(phone === ""){
+    alert("Phone number is required.");
+    document.getElementById("phone").focus();
+    return false;
+  }
+  if(location === ""){
+    alert("Location is required. Enter it manually or use 'Use my current location'.");
+    document.getElementById("location").focus();
+    return false;
+  }
+  return true;
+}
+
+/* ── SCREEN LOCK + BUTTON SPINNER (both together) ──────── */
+function setOrderLoading(loading){
+
+  const overlay = document.getElementById("screenLock");
+  const btn     = document.getElementById("orderBtn");
+
+  if(loading){
+    /* 1. Freeze the entire screen */
+    overlay.style.display             = "block";
+    document.body.style.overflow      = "hidden";
+    document.body.style.pointerEvents = "none";
+    overlay.style.pointerEvents       = "all";
+
+    /* 2. Also show spinner on the button so user sees feedback */
+    btn.disabled  = true;
+    btn.innerHTML = 'ordering… <span class="spinner"></span>';
+
+  } else {
+    /* 1. Unfreeze screen */
+    overlay.style.display             = "none";
+    document.body.style.overflow      = "";
+    document.body.style.pointerEvents = "";
+
+    /* 2. Restore button */
+    btn.disabled  = false;
+    btn.innerHTML = 'order';
+  }
+
+}
+/* ══════════════════════════════════════════════════════
+   PLACE ORDER
+══════════════════════════════════════════════════════ */
+
+async function placeOrder(){
+
+  if(!validateOrder()){ return; }
+
+  const restaurant = document.getElementById("restaurant").value.trim();
+  const phone      = document.getElementById("phone").value.trim();
+  const location   = document.getElementById("location").value.trim();
+  const items      = orderItems.map(i => i.name + " - " + i.qty).join(", ");
+
+  setOrderLoading(true);
+
+  /* ── Build Telegram message ── */
+  const mapsLink = location.includes(",")
+    ? "https://maps.google.com/?q=" + location
+    : location;
+
+  const message =
+`🍽️ NEW FOOD ORDER
+
+🏪 Restaurant: ${restaurant}
+
+📦 Items:
+${items}
+
+📞 Phone: ${phone}
+
+📍 Location:
+${mapsLink}`;
+
+  let telegramOk = true;
+  let sheetsOk   = true;
+
+
+  /* ── Send to Telegram ── */
+  try {
+
+    const tRes  = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method  : "POST",
+        headers : { "Content-Type": "application/json" },
+        body    : JSON.stringify({
+          chat_id : TELEGRAM_CHAT_ID,
+          text    : message
+        })
+      }
+    );
+
+    const tData = await tRes.json();
+    if(!tData.ok){
+      console.error("Telegram rejected:", JSON.stringify(tData));
+      telegramOk = false;
+    }
+
+  } catch(e){
+    console.error("Telegram fetch error:", e);
+    telegramOk = false;
+  }
+
+
+  /* ── Send to Google Sheets ── */
+  if(GOOGLE_SCRIPT_URL !== ""){
+
+    try {
+
+     await fetch(GOOGLE_SCRIPT_URL, {
+  method : "POST",
+  mode   : "no-cors",
+  body   : JSON.stringify({
+    service    : "food",
+    restaurant : restaurant,
+    items      : items,
+    phone      : phone,
+    location   : location
+  })
+});
+    } catch(e){
+      console.error("Sheets fetch error:", e);
+      sheetsOk = false;
+    }
+
+  }
+
+
+  setOrderLoading(false);
+
+
+  /* ── Result feedback ── */
+
+  if(!telegramOk && TELEGRAM_BOT_TOKEN !== ""){
+    alert("❌ Failed to send order via Telegram. Check your internet connection and try again.");
+    return;
+  }
+
+  if(!sheetsOk){
+    alert("⚠️ Order sent via Telegram but failed to save to Google Sheets. Please inform the admin.");
+  } else {
+    alert("✅ Order sent successfully!");
+  }
+
+
+  /* ── Reset interface ── */
+
+  orderItems = [];
+  document.getElementById("itemList").innerHTML       = "";
+  document.getElementById("phone").value              = "";
+  document.getElementById("location").value           = "";
+  document.getElementById("restaurant").value         = "";
+  document.getElementById("itemName").value           = "";
+  document.getElementById("itemQty").value            = "";
+  document.getElementById("locationStatus").textContent = "";
+
+}
+
+</script>
+
+
+</body>
+</html>
