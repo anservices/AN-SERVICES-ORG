@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#b7642e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+<title>Medicine Order</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: #b7642e;
+  font-family: 'Nunito', sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  /* Prevent iOS bounce scroll interfering with overlay */
+  overscroll-behavior: none;
+}
+
+.order-box {
+  background: #d9f2e6;
+  border-radius: 30px;
+  padding: 20px;
+}
+
+/* ── Inputs — full width, touch-friendly height ── */
+input {
+  width: 100%;
+  padding: 14px 12px;
+  border-radius: 15px;
+  background: #f5f5f5;
+  border: none;
+  outline: none;
+  font-size: 16px; /* prevents iOS auto-zoom on focus */
+  font-family: 'Nunito', sans-serif;
+  color: #222;
+  -webkit-appearance: none;
+}
+
+input::placeholder { color: #999; }
+
+/* ── Order button ── */
+.order-btn {
+  background: #d9f2e6;
+  color: #0f766e;
+  font-weight: bold;
+  font-size: clamp(18px, 5vw, 22px);
+  padding: 12px 40px;
+  border-radius: 25px;
+  margin-top: 20px;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.order-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Button spinner ── */
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(15,118,110,0.3);
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Location status ── */
+.location-status {
+  font-size: 13px;
+  margin-top: 4px;
+  min-height: 20px;
+  color: #555;
+}
+
+/* ── Upload buttons — large touch targets ── */
+.upload-btn {
+  flex: 1;
+  padding: 14px 8px;
+  border-radius: 14px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: 'Nunito', sans-serif;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  /* Minimum 48px touch target per mobile UX guidelines */
+  min-height: 52px;
+}
+
+/* ── Screen lock overlay ── */
+#screenLock {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.5);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#screenLock .lock-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 20px;
+  padding: 28px 24px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  /* Responsive width — works on 320px to 430px screens */
+  width: min(85vw, 300px);
+}
+
+#screenLock .lock-spinner {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(0,0,0,0.12);
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: lockSpin 0.7s linear infinite;
+  margin-bottom: 14px;
+}
+
+@keyframes lockSpin { to { transform: rotate(360deg); } }
+
+#screenLock .lock-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 6px 0;
+}
+
+#screenLock .lock-sub {
+  font-size: 12px;
+  color: #888;
+  margin-top: 8px;
+}
+
+/* ── Progress bar ── */
+#progressWrap { display: none; margin-top: 14px; }
+
+#progressTrack {
+  width: 100%;
+  height: 10px;
+  background: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#progressBar {
+  height: 100%;
+  width: 0%;
+  background: #0f766e;
+  border-radius: 10px;
+  transition: width 0.2s ease;
+}
+
+#progressLabel {
+  font-size: 12px;
+  color: #555;
+  margin-top: 5px;
+}
+
+/* ── Error detail box ── */
+#errorDetail {
+  display: none;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #7a5c00;
+  word-break: break-all;
+  text-align: left;
+  line-height: 1.5;
+}
+
+/* ── Call button ── */
+.call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #F5E9D8;
+  color: black;
+  font-weight: bold;
+  font-size: clamp(15px, 4vw, 18px);
+  padding: 12px 28px;
+  border-radius: 9999px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.call-btn:active { transform: scale(0.96); }
+
+</style>
+
+</head>
+
+<body>
+
+<!-- ══════════════════════════════════════════════
+     SCREEN LOCK — must be first child of body
+     so z-index stacks correctly on all browsers
+══════════════════════════════════════════════ -->
+<div id="screenLock">
+  <div class="lock-card">
+    <div class="lock-spinner"></div>
+    <p class="lock-text" id="lockMessage">Uploading prescription…</p>
+
+    <div id="progressWrap">
+      <div id="progressTrack">
+        <div id="progressBar"></div>
+      </div>
+      <div id="progressLabel">0%</div>
+    </div>
+
+    <p class="lock-sub">Please don't close this page</p>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     HEADER
+══════════════════════════════════════════════ -->
+<div class="w-full bg-[#F5E9D8] py-4 flex items-center justify-center relative">
+  <img src="startup.png" class="absolute left-3 w-9 md:w-14" alt="logo">
+  <h1 class="text-2xl md:text-4xl font-bold text-black text-center px-14">
+    AN SERVICES
+  </h1>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     PAGE CONTAINER
+══════════════════════════════════════════════ -->
+<div style="max-width:480px; margin:0 auto; padding:24px 16px 32px;">
+
+  <!-- Title -->
+  <div class="flex items-center justify-center mb-6">
+    <div class="bg-[#d9f2e6] p-3 rounded-xl shadow mr-3 flex-shrink-0">
+      <img src="medicine.png" class="w-8 h-8" alt="medicine">
+    </div>
+    <h2 style="font-size:clamp(16px,4.5vw,26px);"
+        class="font-semibold bg-[#d9f2e6] px-4 py-2 rounded-full text-gray-800 text-center leading-snug">
+      Get your medicine with no hustle
+    </h2>
+  </div>
+
+  <!-- Order Box -->
+  <div class="order-box space-y-3">
+
+    <input id="name"     type="text"  inputmode="text"  autocomplete="name"
+           placeholder="Name">
+
+    <input id="phone"    type="tel"   inputmode="tel"   autocomplete="tel"
+           placeholder="Phone Number">
+
+    <input id="location" type="text"  inputmode="text"
+           placeholder="Location">
+
+    <div id="locationStatus" class="location-status"></div>
+
+    <button onclick="getLocation()" id="locationBtn"
+            class="underline text-sm text-gray-700"
+            style="background:none;border:none;cursor:pointer;padding:2px 0;
+                   -webkit-tap-highlight-color:transparent;">
+      📍 Use my current location
+    </button>
+
+    <!-- Prescription Upload -->
+    <div style="margin-top:6px;">
+      <label class="text-sm text-gray-700 block mb-2 font-semibold">
+        Upload Prescription
+      </label>
+
+      <!--
+        TWO SEPARATE hidden inputs:
+        Camera  → capture="environment" forces rear camera directly (Android + iPhone)
+        Gallery → NO capture attribute    opens photo library (Android + iPhone)
+        This is the correct cross-platform approach.
+      -->
+      <input type="file" id="prescriptionCamera"
+             accept="image/*"
+             capture="environment"
+             class="hidden"
+             onchange="handleFileSelect(this)">
+
+      <input type="file" id="prescriptionGallery"
+             accept="image/*"
+             class="hidden"
+             onchange="handleFileSelect(this)">
+
+      <div style="display:flex; gap:12px;">
+
+        <button type="button"
+                class="upload-btn"
+                style="background:#111; color:white;"
+                onclick="openCamera()">
+          📷 Camera
+        </button>
+
+        <button type="button"
+                class="upload-btn"
+                style="background:#374151; color:white;"
+                onclick="openGallery()">
+          🖼️ Gallery
+        </button>
+
+      </div>
+
+      <div id="filePreview" class="mt-2 text-sm text-gray-700"></div>
+    </div>
+
+    <!-- Debug error box -->
+    <div id="errorDetail"></div>
+
+  </div>
+
+  <!-- Order Button -->
+  <div class="text-center">
+    <button onclick="placeOrder()" id="orderBtn" class="order-btn">
+      Order Medicine
+    </button>
+  </div>
+
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CALL BUTTON
+══════════════════════════════════════════════ -->
+<div class="text-center pb-10">
+  <a href="tel:+916000072131" class="call-btn">
+    📞 Call Us
+  </a>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     SCRIPT
+══════════════════════════════════════════════ -->
+<script>
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+───────────────────────────────────────────────────── */
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwH31TB3L5RHX-YQGJ7CJHXVBem5u29RstbE4Z3YQFJsJl0-rC3NTfNxuUck6D9rb18/exec";   /* ← PASTE HERE */
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR TELEGRAM BOT TOKEN HERE
+───────────────────────────────────────────────────── */
+const TELEGRAM_BOT_TOKEN = "8636717589:AAERLcfWUTkSxv10smOelX_a4XXBRSGYJW8";  /* ← PASTE HERE */
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR TELEGRAM CHAT ID HERE
+───────────────────────────────────────────────────── */
+const TELEGRAM_CHAT_ID = "6012626075
+";    /* ← PASTE HERE */
+
+
+/* ══════════════════════════════════════════════════════
+   CAMERA & GALLERY OPENERS
+   Separated so each triggers the correct input.
+   On iPhone: capture="environment" → opens Camera app directly.
+   Without capture → opens Photo Library directly.
+══════════════════════════════════════════════════════ */
+
+function openCamera(){
+  /* Reset value first so onchange fires even if same file re-selected */
+  const el = document.getElementById("prescriptionCamera");
+  el.value = "";
+  el.click();
+}
+
+function openGallery(){
+  const el = document.getElementById("prescriptionGallery");
+  el.value = "";
+  el.click();
+}
+
+
+/* ══════════════════════════════════════════════════════
+   LOCATION — watchPosition (no lag on second order)
+══════════════════════════════════════════════════════ */
+
+let locationWatcher = null;
+
+function getLocation(){
+
+  if(!confirm("Allow access to your current location?")){ return; }
+
+  const statusEl   = document.getElementById("locationStatus");
+  const locationEl = document.getElementById("location");
+  const btn        = document.getElementById("locationBtn");
+
+  statusEl.textContent = "📍 Fetching your location…";
+  btn.disabled         = true;
+
+  if(locationWatcher !== null){
+    navigator.geolocation.clearWatch(locationWatcher);
+    locationWatcher = null;
+  }
+
+  if(!navigator.geolocation){
+    statusEl.textContent = "❌ Geolocation not supported on this device.";
+    btn.disabled         = false;
+    return;
+  }
+
+  const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+
+  locationWatcher = navigator.geolocation.watchPosition(
+    function(pos){
+      locationEl.value     = pos.coords.latitude + "," + pos.coords.longitude;
+      statusEl.textContent = "✅ Location fetched!";
+      btn.disabled         = false;
+    },
+    function(err){
+      statusEl.textContent = "❌ Unable to get location. Please allow permission.";
+      console.error("Geolocation error:", err.code, err.message);
+      btn.disabled = false;
+    },
+    opts
+  );
+
+}
+
+
+/* ══════════════════════════════════════════════════════
+   FILE SELECTION
+══════════════════════════════════════════════════════ */
+
+let selectedFile = null;
+
+function handleFileSelect(input){
+  if(input.files && input.files[0]){
+    selectedFile = input.files[0];
+    const kb     = (selectedFile.size / 1024).toFixed(1);
+    document.getElementById("filePreview").textContent =
+      "✅ " + selectedFile.name + " (" + kb + " KB)";
+    hideError();
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════
+   BASE64 — with read progress 0→40%
+══════════════════════════════════════════════════════ */
+
+function getBase64WithProgress(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onprogress = function(e){
+      if(e.lengthComputable){
+        const pct = Math.round((e.loaded / e.total) * 40);
+        setProgress(pct, "Reading image… " + pct + "%");
+      }
+    };
+
+    reader.onload  = function(){
+      setProgress(40, "Image ready, uploading…");
+      resolve(reader.result);
+    };
+
+    reader.onerror = function(){
+      reject(new Error("FileReader failed. Try selecting the image again."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+
+/* ══════════════════════════════════════════════════════
+   PROGRESS BAR
+══════════════════════════════════════════════════════ */
+
+function setProgress(pct, label){
+  document.getElementById("progressBar").style.width   = pct + "%";
+  document.getElementById("progressLabel").textContent = label || pct + "%";
+}
+
+function showProgress(){
+  document.getElementById("progressWrap").style.display = "block";
+  setProgress(0, "Starting…");
+}
+
+function hideProgress(){
+  document.getElementById("progressWrap").style.display = "none";
+}
+
+
+/* ══════════════════════════════════════════════════════
+   ERROR BOX
+══════════════════════════════════════════════════════ */
+
+function showError(msg){
+  const box         = document.getElementById("errorDetail");
+  box.textContent   = "⚠️ Debug: " + msg;
+  box.style.display = "block";
+}
+
+function hideError(){
+  const box         = document.getElementById("errorDetail");
+  box.style.display = "none";
+  box.textContent   = "";
+}
+
+
+/* ══════════════════════════════════════════════════════
+   VALIDATION
+══════════════════════════════════════════════════════ */
+
+function validateOrder(){
+
+  const name     = document.getElementById("name").value.trim();
+  const phone    = document.getElementById("phone").value.trim();
+  const location = document.getElementById("location").value.trim();
+
+  if(name === ""){
+    alert("Name is required.");
+    document.getElementById("name").focus();
+    return false;
+  }
+  if(phone === ""){
+    alert("Phone number is required.");
+    document.getElementById("phone").focus();
+    return false;
+  }
+  if(location === ""){
+    alert("Location is required. Enter it manually or tap 'Use my current location'.");
+    document.getElementById("location").focus();
+    return false;
+  }
+  if(!selectedFile){
+    alert("Please upload a prescription photo before ordering.");
+    return false;
+  }
+  return true;
+
+}
+
+
+/* ══════════════════════════════════════════════════════
+   SCREEN LOCK + BUTTON SPINNER
+   NOTE: body pointer-events set to none EXCEPT the
+   overlay itself — fixed Android Chrome unlock issue
+══════════════════════════════════════════════════════ */
+
+function setOrderLoading(loading, message){
+
+  const overlay = document.getElementById("screenLock");
+  const msgEl   = document.getElementById("lockMessage");
+  const btn     = document.getElementById("orderBtn");
+
+  if(loading){
+
+    if(message && msgEl){ msgEl.textContent = message; }
+
+    overlay.style.display = "block";
+
+    /* Lock body scroll on iOS (different from overflow:hidden) */
+    document.body.style.position   = "fixed";
+    document.body.style.width      = "100%";
+    document.body.style.overflow   = "hidden";
+
+    /* Block all taps EXCEPT the overlay */
+    document.body.style.pointerEvents = "none";
+    overlay.style.pointerEvents       = "all";
+
+    btn.disabled  = true;
+    btn.innerHTML = (message || "Uploading") + '… <span class="spinner"></span>';
+
+  } else {
+
+    overlay.style.display = "none";
+
+    document.body.style.position       = "";
+    document.body.style.width          = "";
+    document.body.style.overflow       = "";
+    document.body.style.pointerEvents  = "";
+    overlay.style.pointerEvents        = "";
+
+    hideProgress();
+    btn.disabled  = false;
+    btn.innerHTML = "Order Medicine";
+
+  }
+
+}
+
+
+/* ══════════════════════════════════════════════════════
+   UPLOAD via XMLHttpRequest
+   — real upload progress 40→90%
+   — 60s timeout
+   — handles no-cors empty body (status 0) gracefully
+══════════════════════════════════════════════════════ */
+
+function uploadToScript(payload){
+  return new Promise((resolve, reject) => {
+
+    if(GOOGLE_SCRIPT_URL === ""){
+      resolve({ success: true, fileUrl: "pending" });
+      return;
+    }
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = function(e){
+      if(e.lengthComputable){
+        const pct = 40 + Math.round((e.loaded / e.total) * 50);
+        setProgress(pct, "Uploading… " + pct + "%");
+      }
+    };
+
+    xhr.onload = function(){
+      setProgress(95, "Processing on server…");
+
+      if(xhr.status === 0 || xhr.status === 200){
+        if(!xhr.responseText || xhr.responseText.trim() === ""){
+          resolve({ success: true, fileUrl: "pending" });
+          return;
+        }
+        try{
+          resolve(JSON.parse(xhr.responseText));
+        } catch(e){
+          resolve({ success: true, fileUrl: "pending" });
+        }
+      } else {
+        reject(new Error("HTTP " + xhr.status + " — " + xhr.statusText));
+      }
+    };
+
+    xhr.onerror = function(){
+      reject(new Error("Network error. Check your internet connection and try again."));
+    };
+
+    xhr.ontimeout = function(){
+      reject(new Error("Upload timed out (60s). Your image may be too large or connection too slow."));
+    };
+
+    xhr.timeout = 60000;
+    xhr.open("POST", GOOGLE_SCRIPT_URL, true);
+    xhr.send(JSON.stringify(payload));
+
+  });
+}
+
+
+/* ══════════════════════════════════════════════════════
+   PLACE ORDER
+══════════════════════════════════════════════════════ */
+
+async function placeOrder(){
+
+  if(!validateOrder()){ return; }
+
+  hideError();
+
+  const name     = document.getElementById("name").value.trim();
+  const phone    = document.getElementById("phone").value.trim();
+  const location = document.getElementById("location").value.trim();
+
+  /* Phase 1 — Read image */
+  setOrderLoading(true, "Reading image");
+  showProgress();
+
+  let base64 = "";
+  try{
+    base64 = await getBase64WithProgress(selectedFile);
+  } catch(err){
+    const msg = err.message || String(err);
+    setOrderLoading(false);
+    showError(msg);
+    alert("❌ Failed to read the prescription image.\n\nError: " + msg);
+    return;
+  }
+
+  /* Phase 2 — Upload */
+  setOrderLoading(true, "Uploading prescription");
+
+  let fileUrl   = "No file";
+  let sheetsOk  = true;
+  let uploadErr = "";
+
+  try{
+
+    const result = await uploadToScript({
+      service  : "medicine",
+      name     : name,
+      phone    : phone,
+      location : location,
+      image    : base64
+    });
+
+    setProgress(100, "Upload complete ✅");
+
+    if(result && result.fileUrl && result.fileUrl !== "pending"){
+      fileUrl = result.fileUrl;
+    }
+
+    if(result && result.success === false){
+      sheetsOk  = false;
+      uploadErr = "Script error: " + (result.error || "unknown");
+    }
+
+  } catch(err){
+    sheetsOk  = false;
+    uploadErr = err.message || String(err);
+  }
+
+  if(!sheetsOk){
+    setOrderLoading(false);
+    showError(uploadErr);
+    alert("❌ Failed to upload prescription.\n\nError: " + uploadErr + "\n\nCheck internet and try again.");
+    return;
+  }
+
+  /* Phase 3 — Telegram */
+  setOrderLoading(true, "Sending notification");
+
+  const mapsLine = location.includes(",")
+    ? "https://maps.google.com/?q=" + location
+    : location;
+
+  const message =
+`💊 NEW MEDICINE ORDER
+
+👤 Name: ${name}
+
+📞 Phone: ${phone}
+
+📍 Location:
+${mapsLine}
+
+🖼️ Prescription:
+${fileUrl}`;
+
+  let telegramOk  = true;
+  let telegramErr = "";
+
+  try{
+    const tRes  = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method  : "POST",
+        headers : { "Content-Type": "application/json" },
+        body    : JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: message })
+      }
+    );
+    const tData = await tRes.json();
+    if(!tData.ok){
+      telegramOk  = false;
+      telegramErr = "Telegram API: " + JSON.stringify(tData);
+    }
+  } catch(err){
+    telegramOk  = false;
+    telegramErr = "Telegram fetch: " + (err.message || String(err));
+  }
+
+  setOrderLoading(false);
+
+  if(!telegramOk && TELEGRAM_BOT_TOKEN !== ""){
+    showError(telegramErr);
+    alert("❌ Prescription uploaded but Telegram failed.\n\nError: " + telegramErr + "\n\nPlease inform the admin.");
+    return;
+  }
+
+  alert("✅ Order sent successfully!");
+
+  /* Reset */
+  document.getElementById("name").value                 = "";
+  document.getElementById("phone").value                = "";
+  document.getElementById("location").value             = "";
+  document.getElementById("filePreview").textContent    = "";
+  document.getElementById("locationStatus").textContent = "";
+  document.getElementById("prescriptionCamera").value   = "";
+  document.getElementById("prescriptionGallery").value  = "";
+  selectedFile = null;
+  hideError();
+
+}
+
+</script>
+
+</body>
+</html>
