@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>AN SERVICES</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+
+body{
+background:#FFFFFC;
+font-family:San Fransicco;
+}
+
+.widget{
+background:#e7f05a;
+border-radius:24px;
+box-shadow:0 8px 16px rgba(0,0,0,0.2);
+}
+
+</style>
+
+</head>
+
+<body>
+
+
+<!-- HEADER -->
+
+<div class="w-full bg-[#F5E9D8] py-4 flex items-center justify-center relative">
+
+<img src="startup.png" class="absolute left-4 w-10 md:w-14">
+
+<h1 class="text-3xl md:text-5xl font-bold text-black">
+AN SERVICES
+</h1>
+
+</div>
+
+
+
+<!-- GRID CONTAINER -->
+
+<div class="max-w-5xl mx-auto px-6 py-10">
+
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 text-center">
+
+
+<!-- Grocery -->
+
+<div onclick="go('grocery.html')" class="cursor-pointer">
+
+<div class="widget p-6">
+
+<img src="grocery.png" class="mx-auto w-14">
+
+</div>
+
+<p class="text-xl mt-2 font-semibold">Grocery</p>
+
+</div>
+
+
+<!-- Foods -->
+
+<div onclick="go('food.html')" class="cursor-pointer">
+
+<div class="widget p-6">
+
+<img src="plate.png" class="mx-auto w-14">
+
+</div>
+
+<p class="text-xl mt-2 font-semibold">Foods</p>
+
+</div>
+
+<!-- Medicine -->
+
+<div onclick="go('medicine.html')" class="cursor-pointer">
+
+<div class="widget p-6">
+
+<img src="medicine.png" class="mx-auto w-14">
+
+</div>
+
+<p class="text-xl mt-2 font-semibold">Medicine</p>
+
+</div>
+
+<!-- Ride -->
+
+<div onclick="go('ride.html')" class="cursor-pointer">
+
+<div class="widget p-6">
+
+<img src="ride.png" class="mx-auto w-14">
+
+</div>
+
+<p class="text-xl mt-2 font-semibold">Ride</p>
+
+</div>
+
+
+</div>
+
+</div>
+
+
+<script>
+
+function go(page){
+window.location.href = page;
+}
+
+</script>
+
+</body>
+</html>

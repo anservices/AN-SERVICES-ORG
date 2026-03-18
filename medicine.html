@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Medicine Order</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+
+<style>
+body{
+background:#b7642e;
+font-family:'Nunito', sans-serif;
+}
+
+.order-box{
+background:#d9f2e6;
+border-radius:30px;
+padding:25px;
+}
+
+input{
+width:100%;
+padding:12px;
+border-radius:15px;
+background:#f5f5f5;
+}
+
+.order-btn{
+background:#d9f2e6;
+color:#0f766e;
+font-weight:bold;
+font-size:22px;
+padding:10px 40px;
+border-radius:25px;
+margin-top:20px;
+}
+
+.order-btn:disabled{
+opacity:0.6;
+cursor:not-allowed;
+}
+
+/* ── Spinner ── */
+.spinner{
+display:inline-block;
+width:18px;
+height:18px;
+border:3px solid rgba(15,118,110,0.3);
+border-top-color:#0f766e;
+border-radius:50%;
+animation:spin 0.7s linear infinite;
+vertical-align:middle;
+margin-left:8px;
+}
+
+@keyframes spin{
+to{transform:rotate(360deg);}
+}
+
+.location-status{
+font-size:13px;
+margin-top:4px;
+min-height:18px;
+}
+#screenLock{
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  background:rgba(0,0,0,0.45);
+  backdrop-filter:blur(2px);
+  touch-action:none;
+  user-select:none;
+}
+#screenLock .lock-card{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  background:white;
+  border-radius:20px;
+  padding:28px 36px;
+  text-align:center;
+  box-shadow:0 8px 32px rgba(0,0,0,0.25);
+  min-width:220px;
+}
+#screenLock .lock-spinner{
+  display:inline-block;
+  width:36px;
+  height:36px;
+  border:4px solid rgba(0,0,0,0.12);
+  border-top-color:#0f766e;
+  border-radius:50%;
+  animation:lockSpin 0.7s linear infinite;
+  margin-bottom:14px;
+}
+@keyframes lockSpin{
+  to{transform:rotate(360deg);}
+}
+#screenLock .lock-text{
+  font-size:16px;
+  font-weight:700;
+  color:#333;
+  margin:0;
+}
+#screenLock .lock-sub{
+  font-size:12px;
+  color:#888;
+  margin-top:5px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<!-- HEADER -->
+<div class="w-full bg-[#F5E9D8] py-4 flex items-center justify-center relative">
+
+<img src="startup.png" class="absolute left-2 w-8 md:w-14">
+
+<h1 class="text-2xl md:text-5xl font-bold text-black text-center px-10">
+AN SERVICES
+</h1>
+
+</div>
+<div id="screenLock">
+  <div class="lock-card">
+    <div class="lock-spinner"></div>
+    <p class="lock-text" id="lockMessage">Uploading prescription…</p>
+    <p class="lock-sub">Please don't close this page</p>
+  </div>
+</div>
+
+<!-- CONTAINER -->
+<div class="max-w-md mx-auto px-4 py-8">
+
+<div class="flex items-center justify-center mb-6">
+<div class="bg-[#d9f2e6] p-3 rounded-xl shadow mr-3">
+<img src="medicine.png" class="w-8">
+</div>
+
+<h2 class="text-xl md:text-3xl font-semibold bg-[#d9f2e6] px-4 py-2 rounded-full text-gray-800 text-center">
+Get your medicine with no hustle
+</h2>
+</div>
+
+<div class="order-box space-y-3">
+
+<input id="name"     placeholder="Name">
+<input id="phone"    placeholder="Phone Number">
+<input id="location" placeholder="Location">
+
+<!-- Location status line -->
+<div id="locationStatus" class="location-status text-gray-600"></div>
+
+<button onclick="getLocation()" id="locationBtn" class="underline text-sm text-gray-700">
+Use my current location
+</button>
+
+<div class="mt-2">
+<label class="text-sm text-gray-700 block mb-2">Upload Prescription</label>
+
+<!-- Hidden inputs -->
+<input type="file" id="prescriptionCamera"  accept="image/*" capture="environment" class="hidden" onchange="handleFileSelect(this)">
+<input type="file" id="prescriptionGallery" accept="image/*"                        class="hidden" onchange="handleFileSelect(this)">
+
+<!-- Choice buttons -->
+<div class="flex gap-3">
+<button type="button" onclick="document.getElementById('prescriptionCamera').click()"
+class="flex-1 bg-black text-white py-2 rounded-xl text-sm font-semibold">
+📷 Camera
+</button>
+<button type="button" onclick="document.getElementById('prescriptionGallery').click()"
+class="flex-1 bg-gray-700 text-white py-2 rounded-xl text-sm font-semibold">
+🖼️ Gallery
+</button>
+</div>
+
+<!-- Preview -->
+<div id="filePreview" class="mt-2 text-sm text-gray-700"></div>
+</div>
+
+</div>
+
+<div class="text-center">
+<button onclick="placeOrder()" id="orderBtn" class="order-btn">
+Order Medicine
+</button>
+</div>
+
+</div>
+<!-- ── CALL BUTTON ── -->
+<div class="text-center pb-8">
+  <a href="tel:+916000072131 " id="callBtn"
+    class="inline-flex items-center gap-2 bg-[#F5E9D8] text-black font-bold text-lg px-6 py-3 rounded-full shadow-md active:scale-95 transition-transform">
+    📞 Call Us
+  </a>
+</div>
+
+
+<script>
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+   (Separate from Grocery and Food apps — deploy a new
+    Web App in Apps Script for medicine orders)
+───────────────────────────────────────────────────── */
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwH31TB3L5RHX-YQGJ7CJHXVBem5u29RstbE4Z3YQFJsJl0-rC3NTfNxuUck6D9rb18/exec";   /* ← PASTE HERE */
+
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR TELEGRAM BOT TOKEN HERE
+   Get it from @BotFather on Telegram → /newbot
+───────────────────────────────────────────────────── */
+const TELEGRAM_BOT_TOKEN = "8636717589:AAERLcfWUTkSxv10smOelX_a4XXBRSGYJW8";  /* ← PASTE HERE */
+
+
+/* ─────────────────────────────────────────────────────
+   ✏️  PASTE YOUR TELEGRAM CHAT ID HERE
+   Send a message to your bot, then open:
+   https://api.telegram.org/bot<TOKEN>/getUpdates
+   Find "chat":{"id": ...} — that number is your Chat ID
+───────────────────────────────────────────────────── */
+const TELEGRAM_CHAT_ID = "6012626075";    /* ← PASTE HERE */
+
+
+/* ══════════════════════════════════════════════════════
+   LOCATION — watchPosition fixes second-order lag
+══════════════════════════════════════════════════════ */
+
+let locationWatcher = null;
+
+function getLocation(){
+
+  if(!confirm("Allow access to your current location?")){ return; }
+
+  const statusEl  = document.getElementById("locationStatus");
+  const locationEl = document.getElementById("location");
+  const btn        = document.getElementById("locationBtn");
+
+  statusEl.textContent = "📍 Fetching your location…";
+  btn.disabled         = true;
+
+  /* Clear any previous watcher to avoid duplicates */
+  if(locationWatcher !== null){
+    navigator.geolocation.clearWatch(locationWatcher);
+    locationWatcher = null;
+  }
+
+  if(!navigator.geolocation){
+    statusEl.textContent = "❌ Geolocation not supported on this device.";
+    btn.disabled         = false;
+    return;
+  }
+
+  const opts = {
+    enableHighAccuracy : true,
+    timeout            : 10000,
+    maximumAge         : 0     /* always fresh — no cache lag */
+  };
+
+  function onSuccess(position){
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
+    locationEl.value     = lat + "," + lon;
+    statusEl.textContent = "✅ Location fetched!";
+    btn.disabled         = false;
+  }
+
+  function onError(){
+    statusEl.textContent = "❌ Unable to get location. Please allow permission.";
+    btn.disabled         = false;
+  }
+
+  /* watchPosition stays alive → second order fetches instantly */
+  locationWatcher = navigator.geolocation.watchPosition(onSuccess, onError, opts);
+
+}
+
+
+/* ══════════════════════════════════════════════════════
+   FILE SELECTION — track chosen file across both inputs
+══════════════════════════════════════════════════════ */
+
+let selectedFile = null;
+
+function handleFileSelect(input){
+  if(input.files && input.files[0]){
+    selectedFile = input.files[0];
+    document.getElementById("filePreview").textContent = "✅ Selected: " + selectedFile.name;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════
+   BASE64 CONVERTER
+══════════════════════════════════════════════════════ */
+
+function getBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
+}
+/* ── VALIDATION ────────────────────────────────────────── */
+function validateOrder(){
+  const name     = document.getElementById("name").value.trim();
+  const phone    = document.getElementById("phone").value.trim();
+  const location = document.getElementById("location").value.trim();
+  if(name === ""){
+    alert("Name is required.");
+    document.getElementById("name").focus();
+    return false;
+  }
+  if(phone === ""){
+    alert("Phone number is required.");
+    document.getElementById("phone").focus();
+    return false;
+  }
+  if(location === ""){
+    alert("Location is required. Enter it manually or use 'Use my current location'.");
+    document.getElementById("location").focus();
+    return false;
+  }
+  if(!selectedFile){
+    alert("Please upload a prescription photo before ordering.");
+    return false;
+  }
+  return true;
+}
+
+/* ── SCREEN LOCK + BUTTON SPINNER (both together) ──────── */
+function setOrderLoading(loading, message){
+
+  const overlay = document.getElementById("screenLock");
+  const msgEl   = document.getElementById("lockMessage");
+  const btn     = document.getElementById("orderBtn");
+
+  if(loading){
+    /* Update overlay message if provided */
+    if(message && msgEl){ msgEl.textContent = message; }
+
+    /* 1. Freeze the entire screen */
+    overlay.style.display             = "block";
+    document.body.style.overflow      = "hidden";
+    document.body.style.pointerEvents = "none";
+    overlay.style.pointerEvents       = "all";
+
+    /* 2. Show spinner on button */
+    btn.disabled  = true;
+    btn.innerHTML = (message || "Uploading prescription") + '… <span class="spinner"></span>';
+
+  } else {
+    /* 1. Unfreeze screen */
+    overlay.style.display             = "none";
+    document.body.style.overflow      = "";
+    document.body.style.pointerEvents = "";
+
+    /* 2. Restore button */
+    btn.disabled  = false;
+    btn.innerHTML = "Order Medicine";
+  }
+
+}
+
+/* ══════════════════════════════════════════════════════
+   PLACE ORDER
+══════════════════════════════════════════════════════ */
+
+async function placeOrder(){
+
+  if(!validateOrder()){ return; }
+
+  const name     = document.getElementById("name").value.trim();
+  const phone    = document.getElementById("phone").value.trim();
+  const location = document.getElementById("location").value.trim();
+
+  setOrderLoading(true);
+
+  /* ── Convert prescription image to base64 ── */
+  let base64 = "";
+  try{
+    base64 = await getBase64(selectedFile);
+  } catch(err){
+    alert("❌ Failed to read the prescription image. Please try again.");
+    setOrderLoading(false);
+    return;
+  }
+
+  /* ── Send to Google Apps Script (uploads image, saves to Sheet) ── */
+  let fileUrl    = "No file";
+  let sheetsOk   = true;
+
+  try{
+
+    const res  = await fetch(GOOGLE_SCRIPT_URL, {
+      method : "POST",
+      body   : JSON.stringify({
+        service  : "medicine",
+        name     : name,
+        phone    : phone,
+        location : location,
+        image    : base64
+      })
+    });
+
+    const data = await res.json();
+
+    if(data.success && data.fileUrl){
+      fileUrl = data.fileUrl;
+    } else {
+      sheetsOk = false;
+    }
+
+  } catch(err){
+    console.error("Sheets/Script error:", err);
+    sheetsOk = false;
+  }
+
+  /* ── Block order if Sheets failed (prescription not saved) ── */
+  if(!sheetsOk){
+    alert("❌ Failed to upload prescription to server. Please check your connection and try again.");
+    setOrderLoading(false);
+    return;
+  }
+
+  /* ── Build Telegram message ── */
+  const mapsLine = location.includes(",")
+    ? "https://maps.google.com/?q=" + location
+    : location;
+
+  const message =
+`💊 NEW MEDICINE ORDER
+
+👤 Name: ${name}
+
+📞 Phone: ${phone}
+
+📍 Location:
+${mapsLine}
+
+🖼️ Prescription:
+${fileUrl}`;
+
+  /* ── Send Telegram notification ── */
+  let telegramOk = true;
+
+  try{
+
+    const tRes  = await fetch(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method  : "POST",
+        headers : { "Content-Type": "application/json" },
+        body    : JSON.stringify({
+          chat_id : TELEGRAM_CHAT_ID,
+          text    : message
+        })
+      }
+    );
+
+    const tData = await tRes.json();
+
+    if(!tData.ok){
+      console.error("Telegram rejected:", JSON.stringify(tData));
+      telegramOk = false;
+    }
+
+  } catch(err){
+    console.error("Telegram fetch error:", err);
+    telegramOk = false;
+  }
+
+  setOrderLoading(false);
+
+  /* ── Result feedback ── */
+
+  if(!telegramOk && TELEGRAM_BOT_TOKEN !== ""){
+    alert("❌ Prescription saved but Telegram notification failed. Please inform the admin.");
+    return;
+  }
+
+  alert("✅ Order sent successfully!");
+
+  /* ── Reset interface ── */
+  document.getElementById("name").value                   = "";
+  document.getElementById("phone").value                  = "";
+  document.getElementById("location").value               = "";
+  document.getElementById("filePreview").textContent      = "";
+  document.getElementById("locationStatus").textContent   = "";
+  document.getElementById("prescriptionCamera").value     = "";
+  document.getElementById("prescriptionGallery").value    = "";
+  selectedFile = null;
+
+}
+
+</script>
+
+</body>
+</html>
